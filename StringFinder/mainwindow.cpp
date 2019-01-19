@@ -157,9 +157,10 @@ void MainWindow::buildThreeGramOnBlock(const QVector<int> &filesIndexesInBlock)
                 return;
             }
             inputStream >> curChar;
-            ++unsendedBuildingInfo;
+            QByteArray arr(QString(curChar).toUtf8());
+            unsendedBuildingInfo += arr.size();
 
-            if(inputStream.status() != QTextStream::Ok) {
+            if(inputStream.status() != QTextStream::Ok || curChar.isNonCharacter()) {
                 ok = false;
                 break;
             }
@@ -307,7 +308,8 @@ void MainWindow::findStringOnBlock(QVector<int> &filesIndexesInBlock)
             QChar curChar;
             inputStream >> curChar;
             ++pos;
-            ++unsendedBuildingInfo;
+            QByteArray arr(QString(curChar).toUtf8());
+            unsendedBuildingInfo += arr.size();
             tmp += curChar;
             if(tmp == searchString) {
                 stringPositions.push_back(pos - searchString.size());
@@ -321,7 +323,8 @@ void MainWindow::findStringOnBlock(QVector<int> &filesIndexesInBlock)
             QChar curChar;
             inputStream >> curChar;
             ++pos;
-            ++unsendedBuildingInfo;
+            QByteArray arr(QString(curChar).toUtf8());
+            unsendedBuildingInfo += arr.size();
 
             //shift
             for(int i = 0; i < tmp.size() - 1; ++i) {
