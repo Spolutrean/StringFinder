@@ -17,16 +17,20 @@ QVector<std::pair<QString, int> > MainWindow::allThreeGrams;
 quint64 MainWindow::sizeOfAllFiles, MainWindow::buildingProgress, MainWindow::findingProgress;
 QString MainWindow::searchString;
 QVector<std::pair<int, QVector<quint64> > > MainWindow::foundedStrings;
-bool MainWindow::stopBuilding, MainWindow::stopFinding;
+bool MainWindow::stopBuilding, MainWindow::stopFinding, MainWindow::IndexingInProgress;
+QFileSystemWatcher* MainWindow::fileWatcher;
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    fileWatcher = new QFileSystemWatcher(this);
     connect(&indexingWatcher, SIGNAL(finished()), this, SLOT(filesWereIndexed()));
     ui->threadsCount->setValue(QThread::idealThreadCount());
     ui->treeWidget->setHeaderLabel("Founded string in files:");
+    connect(fileWatcher, SIGNAL(fileChanged(QString)), this, SLOT(somethingChanged(QString)));
+    connect(fileWatcher, SIGNAL(directoryChanged(QString)), this, SLOT(somethingChanged(QString)));
 }
 
 MainWindow::~MainWindow()
@@ -43,6 +47,11 @@ void MainWindow::needStopBuilding()
 void MainWindow::needStopFinding()
 {
     stopFinding = true;
+}
+
+void MainWindow::somethingChanged(const QString &path)
+{
+    on_startIndexingButton_clicked();
 }
 
 
@@ -68,6 +77,7 @@ void MainWindow::indexFilesInDirectory(QString const &dirPath)
     for(QString &fileName : files)
     {
         QString filePath(dirPath + "/" + fileName);
+        fileWatcher->addPath(filePath);
         QFileInfo fileInfo(filePath);
         if(fileInfo.isReadable())
         {
@@ -83,6 +93,10 @@ void MainWindow::indexFilesInDirectory(QString const &dirPath)
 
 void MainWindow::on_startIndexingButton_clicked()
 {
+    if(IndexingInProgress) {
+        return;
+    }
+
     ui->selectDirButton->setEnabled(false);
     ui->threadsCount->setEnabled(false);
     ui->startIndexingButton->setEnabled(false);
@@ -90,7 +104,7 @@ void MainWindow::on_startIndexingButton_clicked()
     sizeOfAllFiles = 0;
     foundedFiles.clear();
 
-
+    IndexingInProgress = true;
     indexingWatcher.setFuture(QtConcurrent::run(&MainWindow::indexFilesInDirectory, ui->dirPath->text()));
     ui->statusBar->showMessage("Indexing files in directory...");
 }
@@ -115,13 +129,14 @@ void MainWindow::distributeFilesEvenly(QVector<int> &files, QVector<QVector<int>
         auto it = minCompletedThread.begin();
         std::pair<quint64, quint8> curThread = *it;
         minCompletedThread.erase(it);
-        result[curThread.second].push_back(i);
+        result[curThread.second].push_back(files[i]);
         minCompletedThread.insert({curThread.first + file.first, curThread.second});
     }
 }
 
 void MainWindow::filesWereIndexed()
 {
+    IndexingInProgress = false;
     ui->statusBar->showMessage("Files were indexed.");
     threadsCount  = qMin((int)threadsCount, foundedFiles.size());
     QVector<int> indexesOfAllFiles(foundedFiles.size());
@@ -236,7 +251,7 @@ void MainWindow::startBuildingThreeGram()
 
     if(threeGramBuildingWatcher.isCanceled())
     {
-        QMessageBox::critical(this, "Canceled", "Hashing has been canceled.");
+        QMessageBox::critical(this, "Canceled", "Building has been canceled.");
         ui->startIndexingButton->setEnabled(true);
         ui->selectDirButton->setEnabled(true);
         ui->threadsCount->setEnabled(true);

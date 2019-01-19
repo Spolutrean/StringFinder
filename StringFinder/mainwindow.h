@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QMutex>
 #include <QFutureWatcher>
+#include <QFileSystemWatcher>
 
 namespace Ui {
 class MainWindow;
@@ -21,7 +22,8 @@ public:
     static QVector<std::pair<quint64, QString> > foundedFiles;
     static QString searchString;
     static QVector<std::pair<int, QVector<quint64> > > foundedStrings;
-    static bool stopBuilding, stopFinding;
+    static bool stopBuilding, stopFinding, IndexingInProgress;
+    static QFileSystemWatcher *fileWatcher;
 
     static QMutex mutex;
     static QFutureWatcher<void> indexingWatcher, threeGramBuildingWatcher, stringFindWatcher;
@@ -47,6 +49,7 @@ private slots:
     void on_startFindingButton_clicked();
     void needStopBuilding();
     void needStopFinding();
+    void somethingChanged(const QString &path);
 
 private:
     Ui::MainWindow *ui;
