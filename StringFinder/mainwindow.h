@@ -22,7 +22,7 @@ public:
     static QVector<std::pair<quint64, QString> > foundedFiles;
     static QString searchString;
     static QVector<std::pair<int, QVector<quint64> > > foundedStrings;
-    static bool stopBuilding, stopFinding, IndexingInProgress;
+    static bool stopBuilding, stopFinding, indexingInProgress;
     static QFileSystemWatcher *fileWatcher;
 
     static QMutex mutex;

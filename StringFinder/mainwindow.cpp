@@ -17,7 +17,7 @@ QVector<std::pair<QString, int> > MainWindow::allThreeGrams;
 quint64 MainWindow::sizeOfAllFiles, MainWindow::buildingProgress, MainWindow::findingProgress;
 QString MainWindow::searchString;
 QVector<std::pair<int, QVector<quint64> > > MainWindow::foundedStrings;
-bool MainWindow::stopBuilding, MainWindow::stopFinding, MainWindow::IndexingInProgress;
+bool MainWindow::stopBuilding, MainWindow::stopFinding, MainWindow::indexingInProgress;
 QFileSystemWatcher* MainWindow::fileWatcher;
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -72,6 +72,7 @@ void MainWindow::indexFilesInDirectory(QString const &dirPath)
     {
         return;
     }
+    fileWatcher->addPath(dirPath);
     QStringList files = curDir.entryList(QDir::Files | QDir::NoSymLinks);
     QStringList dirs = curDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks);
     for(QString &fileName : files)
@@ -93,7 +94,7 @@ void MainWindow::indexFilesInDirectory(QString const &dirPath)
 
 void MainWindow::on_startIndexingButton_clicked()
 {
-    if(IndexingInProgress) {
+    if(indexingInProgress) {
         return;
     }
 
@@ -104,7 +105,7 @@ void MainWindow::on_startIndexingButton_clicked()
     sizeOfAllFiles = 0;
     foundedFiles.clear();
 
-    IndexingInProgress = true;
+    indexingInProgress = true;
     indexingWatcher.setFuture(QtConcurrent::run(&MainWindow::indexFilesInDirectory, ui->dirPath->text()));
     ui->statusBar->showMessage("Indexing files in directory...");
 }
@@ -136,7 +137,7 @@ void MainWindow::distributeFilesEvenly(QVector<int> &files, QVector<QVector<int>
 
 void MainWindow::filesWereIndexed()
 {
-    IndexingInProgress = false;
+    indexingInProgress = false;
     ui->statusBar->showMessage("Files were indexed.");
     threadsCount  = qMin((int)threadsCount, foundedFiles.size());
     QVector<int> indexesOfAllFiles(foundedFiles.size());
