@@ -115,7 +115,7 @@ void MainWindow::distributeFilesEvenly(QVector<int> &files, QVector<QVector<int>
     result.clear();
     result.resize(threadsCount);
     //sort with size of files
-    std::sort(files.begin(), files.end(), [&foundedFiles](const quint64 & a, const quint64 & b){
+    std::sort(files.begin(), files.end(), [](const quint64 & a, const quint64 & b){
         return foundedFiles[a].first < foundedFiles[b].first;
     });
 
@@ -307,12 +307,18 @@ void MainWindow::findStringOnBlock(QVector<int> &filesIndexesInBlock)
 {
     QVector<std::pair<int, QVector<quint64> > > foundedStringsOnBlock;
     quint64 unsendedBuildingInfo = 0;
-    for(int fileNum : filesIndexesInBlock) {
+    for(int& fileNum : filesIndexesInBlock) {
+
         if(MainWindow::stopFinding) {
             return;
+
         }
         QVector<quint64> stringPositions;
+
+        mutex.lock();
         QFile file(foundedFiles[fileNum].second);
+        mutex.unlock();
+
         if(!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             continue;
         }
