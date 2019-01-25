@@ -11,9 +11,9 @@
 #include "QtConcurrent/qtconcurrentmap.h"
 
 QMutex MainWindow::mutex;
-QFutureWatcher<void> MainWindow::indexingWatcher, MainWindow::threeGramBuildingWatcher, MainWindow::stringFindWatcher;
+QFutureWatcher<void> MainWindow::indexingWatcher, MainWindow::threeGramBuildingWatcher, MainWindow::stringFindWatcher, MainWindow::sortingThreeGramsWatcher;
 QVector<std::pair<quint64, QString> > MainWindow::foundedFiles;
-QVector<std::pair<QString, int> > MainWindow::allThreeGrams;
+std::vector<std::pair<QString, int> > MainWindow::allThreeGrams;
 quint64 MainWindow::sizeOfAllFiles, MainWindow::buildingProgress, MainWindow::findingProgress;
 QString MainWindow::searchString;
 QVector<std::pair<int, QVector<quint64> > > MainWindow::foundedStrings;
@@ -31,6 +31,10 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->treeWidget->setHeaderLabel("Founded string in files:");
     connect(fileWatcher, SIGNAL(fileChanged(QString)), this, SLOT(somethingChanged(QString)));
     connect(fileWatcher, SIGNAL(directoryChanged(QString)), this, SLOT(somethingChanged(QString)));
+    connect(&sortingThreeGramsWatcher, SIGNAL(finished()), this, SLOT(threeGramsWereBuilt()));
+
+    //QByteArray ar(QString::fromUtf8("￥").toUtf8());
+    //qDebug() << QString::number(ar.size());
 }
 
 MainWindow::~MainWindow()
@@ -53,7 +57,6 @@ void MainWindow::somethingChanged(const QString &path)
 {
     on_startIndexingButton_clicked();
 }
-
 
 void MainWindow::on_selectDirButton_clicked()
 {
@@ -83,7 +86,7 @@ void MainWindow::indexFilesInDirectory(QString const &dirPath)
         if(fileInfo.isReadable())
         {
             foundedFiles.push_back({fileInfo.size(), filePath});
-            sizeOfAllFiles += fileInfo.size();
+            sizeOfAllFiles += (fileInfo.size() >> 15);
         }
     }
     for(QString &dir : dirs)
@@ -155,7 +158,6 @@ void MainWindow::buildThreeGramOnBlock(const QVector<int> &filesIndexesInBlock)
         if(MainWindow::stopBuilding) {
             return;
         }
-        quint64 unsendedBuildingInfo = 0;
         QString filePath = foundedFiles[filesIndexesInBlock[fileNum]].second;
         std::set<QString> threeGramsInFile;
         QFile file(filePath);
@@ -173,8 +175,6 @@ void MainWindow::buildThreeGramOnBlock(const QVector<int> &filesIndexesInBlock)
                 return;
             }
             inputStream >> curChar;
-            QByteArray arr(QString(curChar).toUtf8());
-            unsendedBuildingInfo += arr.size();
 
             if(inputStream.status() != QTextStream::Ok || curChar.isNonCharacter()) {
                 ok = false;
@@ -193,41 +193,39 @@ void MainWindow::buildThreeGramOnBlock(const QVector<int> &filesIndexesInBlock)
                 tgm += third;
                 threeGramsInFile.insert(tgm);
             }
-
-            //update building info
-            if(unsendedBuildingInfo >= (1<<10) && mutex.tryLock()) {
-                buildingProgress += (unsendedBuildingInfo >> 10);
-                unsendedBuildingInfo = 0;
-                emit MainWindow::threeGramBuildingWatcher.progressValueChanged(buildingProgress);
-                mutex.unlock();
-            }
         }
         file.close();
 
-        if(!ok) {
-            mutex.lock();
-            buildingProgress += (file.size() - inputStream.pos() + unsendedBuildingInfo - 1 >> 10);
-            emit MainWindow::threeGramBuildingWatcher.progressValueChanged(buildingProgress);
-            mutex.unlock();
-            continue;
-        } else {
-            mutex.lock();
-            buildingProgress += (unsendedBuildingInfo >> 10);
-            emit MainWindow::threeGramBuildingWatcher.progressValueChanged(buildingProgress);
-            mutex.unlock();
+        if(MainWindow::stopBuilding) {
+            return;
         }
 
-        //add three grams in file to block three grams
-        for(const QString &tgm : threeGramsInFile) {
-            threeGramsInBlock.push_back({tgm, filesIndexesInBlock[fileNum]});
+        //update progress
+        mutex.lock();
+        buildingProgress += (file.size() >> 15);
+        emit MainWindow::threeGramBuildingWatcher.progressValueChanged(buildingProgress);
+        mutex.unlock();
+
+        if(ok) {
+            //add three grams in file to block three grams
+            for(const QString &tgm : threeGramsInFile) {
+                threeGramsInBlock.push_back({tgm, filesIndexesInBlock[fileNum]});
+            }
         }
     }
     if(MainWindow::stopBuilding) {
         return;
     }
+    qDebug() << "thread started merge information";
     mutex.lock();
     std::move(threeGramsInBlock.begin(), threeGramsInBlock.end(), std::back_inserter(allThreeGrams));
     mutex.unlock();
+    qDebug() << "thread finished merge information";
+}
+
+void MainWindow::sortAllThreeGrams()
+{
+    std::sort(allThreeGrams.begin(), allThreeGrams.end());
 }
 
 void MainWindow::startBuildingThreeGram()
@@ -239,7 +237,7 @@ void MainWindow::startBuildingThreeGram()
     stopBuilding = false;
     QProgressDialog pdialog;
     pdialog.setLabelText("Building a three grams...");
-    pdialog.setRange(0, sizeOfAllFiles>>10);
+    pdialog.setRange(0, sizeOfAllFiles);
     connect(&pdialog, SIGNAL(canceled()), &threeGramBuildingWatcher, SLOT(cancel()));
     connect(&pdialog, SIGNAL(canceled()), this, SLOT(needStopBuilding()));
     connect(&threeGramBuildingWatcher, SIGNAL(finished()), &pdialog, SLOT(reset()));
@@ -261,7 +259,8 @@ void MainWindow::startBuildingThreeGram()
     }
     else
     {
-        threeGramsWereBuilt();
+        ui->statusBar->showMessage("Sorting threegrams...");
+        sortingThreeGramsWatcher.setFuture(QtConcurrent::run(&MainWindow::sortAllThreeGrams));
     }
 
 }
@@ -269,7 +268,6 @@ void MainWindow::startBuildingThreeGram()
 void MainWindow::threeGramsWereBuilt()
 {
     ui->statusBar->showMessage("3-grams were built.");
-    std::sort(allThreeGrams.begin(), allThreeGrams.end());
     ui->startFindingButton->setEnabled(true);
     ui->threadsCount->setEnabled(true);
     ui->selectDirButton->setEnabled(true);
@@ -306,7 +304,6 @@ QVector<int> MainWindow::filesWithThisThreeGram(const QString &tgm)
 void MainWindow::findStringOnBlock(QVector<int> &filesIndexesInBlock)
 {
     QVector<std::pair<int, QVector<quint64> > > foundedStringsOnBlock;
-    quint64 unsendedBuildingInfo = 0;
     for(int& fileNum : filesIndexesInBlock) {
 
         if(MainWindow::stopFinding) {
@@ -330,8 +327,6 @@ void MainWindow::findStringOnBlock(QVector<int> &filesIndexesInBlock)
             QChar curChar;
             inputStream >> curChar;
             ++pos;
-            QByteArray arr(QString(curChar).toUtf8());
-            unsendedBuildingInfo += arr.size();
             tmp += curChar;
             if(tmp == searchString) {
                 stringPositions.push_back(pos - searchString.size());
@@ -345,8 +340,6 @@ void MainWindow::findStringOnBlock(QVector<int> &filesIndexesInBlock)
             QChar curChar;
             inputStream >> curChar;
             ++pos;
-            QByteArray arr(QString(curChar).toUtf8());
-            unsendedBuildingInfo += arr.size();
 
             //shift
             for(int i = 0; i < tmp.size() - 1; ++i) {
@@ -358,14 +351,6 @@ void MainWindow::findStringOnBlock(QVector<int> &filesIndexesInBlock)
             if(tmp == searchString) {
                 stringPositions.push_back(pos - searchString.size());
             }
-
-            //update building info
-            if(unsendedBuildingInfo >= (1<<10) && mutex.tryLock()) {
-                findingProgress += (unsendedBuildingInfo >> 10);
-                unsendedBuildingInfo = 0;
-                emit MainWindow::stringFindWatcher.progressValueChanged(findingProgress);
-                mutex.unlock();
-            }
         }
 
         if(stringPositions.size()) {
@@ -373,15 +358,18 @@ void MainWindow::findStringOnBlock(QVector<int> &filesIndexesInBlock)
         }
 
         file.close();
+
+        //update info
+        mutex.lock();
+        findingProgress += (file.size() >> 15);
+        emit MainWindow::stringFindWatcher.progressValueChanged(findingProgress);
+        mutex.unlock();
     }
 
     if(MainWindow::stopFinding) {
         return;
     }
     mutex.lock();
-    findingProgress += (unsendedBuildingInfo >> 10);
-    unsendedBuildingInfo = 0;
-    emit MainWindow::stringFindWatcher.progressValueChanged(findingProgress);
     std::move(foundedStringsOnBlock.begin(), foundedStringsOnBlock.end(), std::back_inserter(foundedStrings));
     mutex.unlock();
 }
@@ -445,6 +433,10 @@ void MainWindow::on_startFindingButton_clicked()
         filesWithAllThreeGrams.resize(std::unique(filesWithAllThreeGrams.begin(), filesWithAllThreeGrams.end()) - filesWithAllThreeGrams.begin());
     }
 
+    if(filesWithAllThreeGrams.size() == 0) {
+        ok = false;
+    }
+
     if (ok) {
         threadsCount = qMin(ui->threadsCount->value(), filesWithAllThreeGrams.size());
         distributeFilesEvenly(filesWithAllThreeGrams, distributedFiles);
@@ -457,7 +449,7 @@ void MainWindow::on_startFindingButton_clicked()
         for(int fileId : filesWithAllThreeGrams) {
             sizeOfFilesWithThreeGrams += foundedFiles[fileId].first;
         }
-        pdialog.setRange(0, sizeOfFilesWithThreeGrams>>10);
+        pdialog.setRange(0, sizeOfFilesWithThreeGrams>>15);
         connect(&pdialog, SIGNAL(canceled()), &stringFindWatcher, SLOT(cancel()));
         connect(&pdialog, SIGNAL(canceled()), this, SLOT(needStopFinding()));
         connect(&stringFindWatcher, SIGNAL(finished()), &pdialog, SLOT(reset()));

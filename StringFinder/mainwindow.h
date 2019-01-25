@@ -17,7 +17,7 @@ public:
     QVector<QVector<int> > distributedFiles;
     quint8 threadsCount;
 
-    static QVector<std::pair<QString, int> > allThreeGrams;
+    static std::vector<std::pair<QString, int> > allThreeGrams;
     static quint64 sizeOfAllFiles, buildingProgress, findingProgress;
     static QVector<std::pair<quint64, QString> > foundedFiles;
     static QString searchString;
@@ -26,17 +26,17 @@ public:
     static QFileSystemWatcher *fileWatcher;
 
     static QMutex mutex;
-    static QFutureWatcher<void> indexingWatcher, threeGramBuildingWatcher, stringFindWatcher;
+    static QFutureWatcher<void> indexingWatcher, threeGramBuildingWatcher, stringFindWatcher, sortingThreeGramsWatcher;
     static void buildThreeGramOnBlock(const QVector<int>& filesIndexesInBlock);
     static void indexFilesInDirectory(QString const &curDirPath);
     static void findStringOnBlock(QVector<int>& filesIndexesInBlock);
+    static void sortAllThreeGrams();
 
     explicit MainWindow(QWidget *parent = 0);
     ~MainWindow();
 
     void distributeFilesEvenly(QVector<int> &files, QVector<QVector<int> > &result);
     void startBuildingThreeGram();
-    void threeGramsWereBuilt();
     void buildTree();
 
     QVector<int> filesWithThisThreeGram(const QString &tgm);
@@ -50,6 +50,7 @@ private slots:
     void needStopBuilding();
     void needStopFinding();
     void somethingChanged(const QString &path);
+    void threeGramsWereBuilt();
 
 private:
     Ui::MainWindow *ui;
