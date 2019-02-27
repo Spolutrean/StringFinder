@@ -33,8 +33,19 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(fileWatcher, SIGNAL(directoryChanged(QString)), this, SLOT(somethingChanged(QString)));
     connect(&sortingThreeGramsWatcher, SIGNAL(finished()), this, SLOT(threeGramsWereBuilt()));
 
-    //QByteArray ar(QString::fromUtf8("￥").toUtf8());
-    //qDebug() << QString::number(ar.size());
+    /*
+    QByteArray ar(QString::fromUtf8("🦖").toUtf8());
+    qDebug() << QString::number(ar.size());
+    QByteArray first(2, '2');
+    first[0] = ar[0];
+    first[1] = ar[1];
+    QByteArray second(2, '2');
+    second[0] = ar[2];
+    second[1] = ar[3];
+    QString firstChar = QString::fromStdString(first.toStdString());
+    QString secondChar = QString::fromStdString(second.toStdString());
+    QChar c00 = firstChar[0], c01 = firstChar[1];
+    QChar c10 = secondChar[0], c11 = secondChar[1];*/
 }
 
 MainWindow::~MainWindow()
